@@ -11,10 +11,10 @@
  	zstart = 0
  	zend = 300
  	zaxis_positive_direction = "down"
- 	tstart_yy = 2016
+ 	tstart_yy = 2009
  	tstart_mm = 5
- 	tstart_dd = 2
- 	tend_yy = 2016
+ 	tstart_dd = 1
+ 	tend_yy = 2009
  	tend_mm = 10
  	tend_dd = 31
  	time_step = 10800
