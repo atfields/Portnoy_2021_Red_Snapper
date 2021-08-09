@@ -17,4 +17,4 @@ ls -d node | xargs -P 20 -I {} $WORK/bin/Data_transform.sh {} "*.txt"
 
 wait
 
-ls -d node | xargs -P 20 -I {} $WORK/bin/MultiPolywoggle.R {} "*.txt"
+ls -d node | xargs -P 20 -I {} $WORK/bin/MultiPolywoggle.r {} "*.txt"
