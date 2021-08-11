@@ -72,5 +72,5 @@ quantile(boot.flz, probs = 0.05)
 
 p1 <- ggpairs(boot.flz$estim) + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
 
-ggsave("zero_lognormal_correlation.tif", p1, device="tiff")
+ggsave("zero_lognormal_correlation.svg", p1, device="svg")
 ```}
