@@ -14,6 +14,7 @@ library('scales')
 library('CaDENCE')
 library('corrplot')
 library('GGally')
+library('svglite')
 ```}
 
 #Plotting Data
@@ -48,7 +49,7 @@ flz
 
 #Plotting all of the models together
 {```{R}
-tiff("Adult_movement.tif", res=300, width=5000, height=4000)
+svglite("Adult_movement.svg")
 par(mfrow = c(2, 2))
 plot.legend <- c("zero-Weibull", "zero-lognormal", "zero-gamma", "Weibull")
 denscomp(list(fwz, flz, fgz, fw), legendtext = plot.legend, ylim=c(0,0.005))
