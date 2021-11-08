@@ -34,6 +34,7 @@ library('sf')
 library('spatialEco')
 library("fitdistrplus")
 library('CaDENCE')
+library('svglite')
 
 #Loading data
 load("gen.net.gz")
@@ -464,7 +465,7 @@ uniq.new.lats <- rbind(uniq.new.lats,c(tmp.v,i))
 }
 uniq.new.lats <- uniq.new.lats[-1,]
 
-#On DT; Getting the matrix with the new points
+#Getting the matrix with the new points
 Model.dat <- read.table("All_link.txt", head=T, row.names=1)
 colnames(Model.dat) <- rownames(Model.dat)
 
@@ -479,31 +480,45 @@ Larv.mat[i,] <- tmp.v
 }
 colnames(Larv.mat) <- rownames(Larv.mat) <- uniq.new.lats$N
 
-#Averaging the similarity
-Larv.avg <- matrix(nrow=nrow(uniq.new.lats), ncol=nrow(uniq.new.lats))
-colnames(Larv.avg) <- rownames(Larv.avg) <- uniq.new.lats$N
+#Making the East and West matricies
+{```{R}```
+Larv.toEast <- matrix(nrow=nrow(uniq.new.lats), ncol=nrow(uniq.new.lats))
+colnames(Larv.toEast) <- rownames(Larv.toEast) <- uniq.new.lats$N
+Larv.toWest <- matrix(nrow=nrow(uniq.new.lats), ncol=nrow(uniq.new.lats))
+colnames(Larv.toWest) <- rownames(Larv.toWest) <- uniq.new.lats$N
+
 for(i in 1:nrow(uniq.new.lats)){
 for(j in 1:nrow(uniq.new.lats)){
 INDV1 <- rownames(Larv.avg)[i]
 INDV2 <- colnames(Larv.avg)[j]
-Larv.avg[i, j] <- Larv.avg[j, i] <- mean(Larv.mat[INDV1, INDV2], Larv.mat[INDV2, INDV1])
-}
-}
+if(uniq.new.lats$Lon[i] < uniq.new.lats$Lon[j]){
+Larv.toEast[i, j] <- Larv.toEast[j, i] <- Larv.mat[INDV1, INDV2]
+Larv.toWest[i, j] <- Larv.toWest[j, i] <- Larv.mat[INDV2, INDV1]
+} else if(uniq.new.lats$Lon[i] > uniq.new.lats$Lon[j]){
+Larv.toEast[i, j] <- Larv.toEast[j, i] <- Larv.mat[INDV2, INDV1]
+Larv.toWest[i, j] <- Larv.toWest[j, i] <- Larv.mat[INDV1, INDV2]
+}}}
 
 #Getting Larval distance
-Larval.dist <- sqrt(1-Larv.avg)
+Larval.dist_E <- sqrt(1-Larv.toEast)
+Larval.dist_W <- sqrt(1-Larv.toWest)
 
 #Defining the threshold
-threshh <- give.thresh(as.dist(Larval.dist))
-threshh
+threshh_E <- 0.9999985
+threshh_W <- 0.9999999999065
 
 #Making the weighted network
-nb.mat <- 1 - (Larval.dist/(4 *threshh))^2
-nb.mat[Larval.dist > threshh] <- 0
-diag(nb.mat) <- 0
+nb.mat_E <- 1 - (Larval.dist_E/(4 *threshh_E))^2
+nb.mat_E[Larval.dist_E > threshh_E] <- 0
+diag(nb.mat_E) <- 0
+
+nb.mat_W <- 1 - (Larval.dist_W/(4 *threshh_W))^2
+nb.mat_W[Larval.dist_W > threshh_W] <- 0
+diag(nb.mat_W) <- 0
 
 #Making the network
-nb <- mat2listw(nb.mat)
+nb_E <- mat2listw(nb.mat_E)
+nb_W <- mat2listw(nb.mat_W)
 
 #Plot of connection network
 tiff(filename ="Larval_MEM_Connection_network_CA.tiff", res=200, width=2000, height=2000)
@@ -517,96 +532,146 @@ dist.mat <- distm(uniq.new.lats[,1:2], fun=distHaversine)/1000
 plot(dist.mat[nb.mat!=0], nb.mat[nb.mat!=0], pch=21, bg="red4", ylab="dbMEM spatial weight", xlab="Distance (km)")
 dev.off()
 
+#Plot the to East of connection network
+tiff(filename ="Larval_MEM_Connection_network_East_CA.tiff", res=200, width=2000, height=2000)
+par(mfrow=c(2,1))
+plot(nb_E, uniq.new.lats, col="red4", pch=19)
+mtext(paste("Nearest neighbors (thresh=", round(threshh_E,7), ")"), 3, cex=2, font=2, line=0.25)
+grid(col="grey60")
+box()
+#Plot of distance vs spatial weight
+dist.mat <- distm(uniq.new.lats[,1:2], fun=distHaversine)/1000
+plot(dist.mat[nb.mat_E!=0], nb.mat_E[nb.mat_E!=0], pch=21, bg="red4", ylab="dbMEM spatial weight", xlab="Distance (km)")
+dev.off()
+
+#Plot the to West of connection network
+tiff(filename ="Larval_MEM_Connection_network_West_CA.tiff", res=200, width=2000, height=2000)
+par(mfrow=c(2,1))
+plot(nb_W, uniq.new.lats, col="red4", pch=19)
+mtext(paste("Nearest neighbors (thresh=", round(threshh_W,7), ")"), 3, cex=2, font=2, line=0.25)
+grid(col="grey60")
+box()
+#Plot of distance vs spatial weight
+dist.mat <- distm(uniq.new.lats[,1:2], fun=distHaversine)/1000
+plot(dist.mat[nb.mat_W!=0], nb.mat_W[nb.mat_W!=0], pch=21, bg="red4", ylab="dbMEM spatial weight", xlab="Distance (km)")
+dev.off()
+
 #Diagnolization of listw object
 MEM.autocor="positive"
-Larval_MEM <- adespatial::scores.listw(nb, MEM.autocor = MEM.autocor, store.listw = T)
-dim(Larval_MEM)
+Larval_MEM_E <- adespatial::scores.listw(nb_E, MEM.autocor = MEM.autocor, store.listw = T)
+dim(Larval_MEM_E)
+Larval_MEM_W <- adespatial::scores.listw(nb_W, MEM.autocor = MEM.autocor, store.listw = T)
+dim(Larval_MEM_W)
 
 #RDA Larval MEMs
 #Looking at VIF and correlation
-Larval_MEM <- Larval_MEM[which(! uniq.new.lats$N %in% new.lats$N[grep("Pt_",rownames(new.lats))]),]
-rda.L_MEM <- rda(out.data ~ ., Larval_MEM)
+Larval_MEM_E <- Larval_MEM_E[which(! uniq.new.lats$N %in% new.lats$N[grep("Pt_",rownames(new.lats))]),]
+rda.L_MEM <- rda(out.data ~ ., Larval_MEM_E)
 vif.L_MEM <- vif.cca(rda.L_MEM)
 max(vif.L_MEM, na.rm=T)
 
-cor.m <- cor(Larval_MEM)
+cor.m <- cor(Larval_MEM_E)
 for(i in 1:nrow(cor.m)){cor.m[i,i] <- 0}
 max(cor.m)
 
-# Removing multicollinearity within dbMEM data
-new.data <- Larval_MEM
-PC.rm.list <- vector()
-
-#Removes the highest Axis until VIF drops
-while(max(vif.L_MEM) > 3){
-MAX <- max(vif.L_MEM)
-vif.test <- vif.L_MEM[which(vif.L_MEM==MAX)]
-for(i in 1:length(vif.test)){
-tmp.dat <- new.data[ , which(!(names(new.data) %in% names(vif.test)[i]))]
-rda.L_MEM <- rda(out.data ~ ., tmp.dat)
+Larval_MEM_W <- Larval_MEM_W[which(! uniq.new.lats$N %in% new.lats$N[grep("Pt_",rownames(new.lats))]),]
+rda.L_MEM <- rda(out.data ~ ., Larval_MEM_W)
 vif.L_MEM <- vif.cca(rda.L_MEM)
-if(max(vif.L_MEM)<MAX){
-PC.rm.list <- c(PC.rm.list,names(vif.test)[i])
-print(paste(names(vif.test)[i],": Max VIF = ", round(max(vif.L_MEM),3)))
-break}
-}
-if(max(vif.L_MEM)>=MAX){print("All terms checked and none are colinear with max VIF"); break}
-new.data <- tmp.dat
-}
-Larval_MEM <- new.data
+max(vif.L_MEM, na.rm=T)
 
-#RDA Larval MEMs
-m1<-rda(out.data ~ ., Larval_MEM)
-m0<-rda(out.data ~ 1, Larval_MEM)
+cor.m <- cor(Larval_MEM_W)
+for(i in 1:nrow(cor.m)){cor.m[i,i] <- 0}
+max(cor.m)
+
+#RDA Larval_MEM_E
+m1<-rda(out.data ~ ., Larval_MEM_E)
+m0<-rda(out.data ~ 1, Larval_MEM_E)
 
 set.seed(1235)
-m.ord_Larval <- ordiR2step(m0, scope = formula(m1), Pin=0.05, Pout=0.1, permutations = 999, parallel=25)
-m.ord_Larval
+m.ord_Larval_E <- ordiR2step(m0, scope = formula(m1), Pin=0.05, Pout=0.1, permutations = 999, parallel=25)
+m.ord_Larval_E
 
-m.ord_Larval$anova
+m.ord_Larval_E$anova
 
-RsquareAdj(m.ord_Larval)
+RsquareAdj(m.ord_Larval_E)
 
-m.ord_Larval$CCA$eig[1:7]/m.ord_Larval$tot.chi
+m.ord_Larval_E$CCA$eig[1:7]/m.ord_Larval_E$tot.chi
 
-anova(m.ord_Larval, parallel=20)
+anova(m.ord_Larval_E, parallel=20)
 
-tmp_anova <- anova(m.ord_Larval, by="axis", parallel=30)
+tmp_anova <- anova(m.ord_Larval_E, by="axis", parallel=30)
 tmp_anova
 tmp_anova$Variance[1:4]/sum(tmp_anova$Variance)
 
-anova_MARG <- anova(m.ord_Larval, by="margin", parallel=30)
+anova_MARG <- anova(m.ord_Larval_E, by="margin", parallel=30)
 anova_MARG
 
 cbind(rownames(anova_MARG),round(anova_MARG$Variance[1:length(anova_MARG$Variance)]/sum(anova_MARG$Variance),6))
 
-#Plotting Larval MEMs
+#RDA Larval_MEM_W
+m1<-rda(out.data ~ ., Larval_MEM_W)
+m0<-rda(out.data ~ 1, Larval_MEM_W)
+
+set.seed(1235)
+m.ord_Larval_W <- ordiR2step(m0, scope = formula(m1), Pin=0.05, Pout=0.1, permutations = 999, parallel=25)
+m.ord_Larval_W
+
+m.ord_Larval_W$anova
+
+RsquareAdj(m.ord_Larval_W)
+
+m.ord_Larval_W$CCA$eig[1:7]/m.ord_Larval_W$tot.chi
+
+anova(m.ord_Larval_W, parallel=20)
+
+tmp_anova <- anova(m.ord_Larval_W, by="axis", parallel=30)
+tmp_anova
+
+tmp_anova$Variance[1:4]/sum(tmp_anova$Variance)
+
+anova_MARG <- anova(m.ord_Larval_W, by="margin", parallel=30)
+anova_MARG
+
+cbind(rownames(anova_MARG),round(anova_MARG$Variance[1:length(anova_MARG$Variance)]/sum(anova_MARG$Variance),6))
+
+#Plotting East Larval MEMs
 setPop(gen.Gulf) <- ~SubPOP
 POP <- vector()
 for(i in uniq.new.lats$N[!(uniq.new.lats$N %in% new.lats$N[grep("Pt",rownames(new.lats))])]){
 if(i == 25742){POP <- c(POP,"CP_MX");next}
 POP <- c(POP,as.character(head(pop(gen.Gulf)[gen.Gulf@strata$N == i],n=1)))}
 
-tmp_data <- data.frame(MEM=Larval_MEM, POP=POP, Coords=uniq.new.lats[which(! uniq.new.lats$N %in% new.lats$N[grep("Pt_",rownames(new.lats))]),1:2], RDA=m.ord_Larval$CCA$wa)
+tmp_data <- data.frame(MEM=Larval_MEM_E, POP=POP, Coords=uniq.new.lats[which(! uniq.new.lats$N %in% new.lats$N[grep("Pt_",rownames(new.lats))]),1:2], RDA=m.ord_Larval_E$CCA$wa)
 tmp_data$POP <- factor(tmp_data$POP, levels = c("DT", "Gulf_FL_S", "Gulf_FL_N", "PC", "AL", "E_LA", "W_LA", "TX", "N_MX", "VC_MX", "CP_MX"))
 
-L_MEM10.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM10), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Larval MEM 10")
-L_MEM10.map
+L_MEM9.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM12), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "eLarval\nMEM 9")
+L_MEM9.map
+ggsave(L_MEM9.map, file="E_LMEM9_map.svg", device="svg")
 
-ggsave(L_MEM10.map, file="LMEM10_map.tif", device="tiff")
+L_MEM11.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM11), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Larval MEM 11")
+L_MEM11.map
+
+ggsave(L_MEM11.map, file="E_LMEM11_map.tif", device="tiff")
+
+L_MEM12.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM12), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "eLarval\nMEM 12")
+L_MEM12.map
+ggsave(L_MEM12.map, file="E_LMEM12_map.svg", device="svg")
 
 RDA1.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=RDA1), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Larval RDA 1")
-RDA1.map
+RDA2.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=RDA2), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Larval RDA 2")
+RDA3.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=RDA3), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Larval RDA 3")
+multiplot(RDA1.map, RDA2.map, RDA3.map)
 
-ggsave(RDA1.map, file="Larval_CA_RDA1.tif", device="tiff")
+ggsave(multiplot(RDA1.map, RDA2.map, RDA3.map), file="E_Larval_CA_RDA_maps.tif", device="tiff")
 
 # Combo #
 #Using just the significant MEMs
 #Combining data
 names(Adult_MEM) <- apply(data.frame(names(Adult_MEM)), 1, function(x) paste(x, "Adult", sep="_"))
-names(Larval_MEM) <- apply(data.frame(names(Larval_MEM)), 1, function(x) paste(x, "Larval", sep="_"))
-RDA_data <- cbind(Dist_MEM[,grepl("MEM20", colnames(Dist_MEM))], Adult_MEM[,grepl("MEM11", colnames(Adult_MEM)) | grepl("MEM20", colnames(Adult_MEM))], Larval_MEM[,grepl("MEM10", colnames(Larval_MEM))])
-colnames(RDA_data) <- c("MEM20","MEM11_Adult","MEM20_Adult","MEM10_Larval")
+names(Larval_MEM_E) <- apply(data.frame(names(Larval_MEM_E)), 1, function(x) paste(x, "Larval_E", sep="_"))
+names(Larval_MEM_W) <- apply(data.frame(names(Larval_MEM_W)), 1, function(x) paste(x, "Larval_W", sep="_"))
+RDA_data <- cbind(Dist_MEM[,grepl("MEM20", colnames(Dist_MEM))], Adult_MEM[,grepl("MEM11", colnames(Adult_MEM)) | grepl("MEM20", colnames(Adult_MEM))], Larval_MEM_E[,grepl("MEM9", colnames(Larval_MEM_E)) | grepl("MEM11", colnames(Larval_MEM_E)) | grepl("MEM12", colnames(Larval_MEM_E))], Larval_MEM_E[,grepl("MEM14", colnames(Larval_MEM_W)) | grepl("MEM17", colnames(Larval_MEM_W)) | grepl("MEM19", colnames(Larval_MEM_W))])
+colnames(RDA_data) <- c("MEM20","MEM11_Adult","MEM20_Adult","MEM9_Larval_E", "MEM11_Larval_E", "MEM12_Larval_E", "MEM14_Larval_W", "MEM17_Larval_W", "MEM19_Larval_W")
 dim(RDA_data)
 
 #RDA
@@ -626,7 +691,7 @@ m1<-rda(out.data ~ ., RDA_data)
 m0<-rda(out.data ~ 1, RDA_data)
 
 set.seed(1235)
-m.ord_Combine <- ordiR2step(m0, scope = formula(m1), Pin=0.05, Pout=0.1, permutations = 999, parallel=20, )
+m.ord_Combine <- ordiR2step(m0, scope = formula(m1), Pin=0.05, Pout=0.1, permutations = 999, parallel=20)
 m.ord_Combine
 
 m.ord_Combine$anova
@@ -647,21 +712,21 @@ cbind(rownames(anova_MARG),round(anova_MARG$Variance[1:length(anova_MARG$Varianc
 
 #Constrained analyses of each set of MEMs
 #dbMEMs
-prda1 <- rda(out.data ~  MEM20 + Condition(MEM11_Adult + MEM20_Adult + MEM10_Larval), data = RDA_data)
+prda1 <- rda(out.data ~  MEM20 + Condition(MEM11_Adult + MEM20_Adult + MEM11_Larval_E + MEM12_Larval_E), data = RDA_data)
 prda1_anov <- anova(prda1, permutations = 999, parallel=20)
 cbind(rownames(prda1_anov),round(prda1_anov$Variance[1:length(prda1_anov$Variance)]/sum(prda1_anov$Variance),6))
 RsquareAdj(prda1)
 anova(prda1, by = "margin", permutations = 999, parallel=20)
 
 #Adult MEMs
-prda2 <- rda(out.data ~  MEM11_Adult + MEM20_Adult + Condition(MEM10_Larval + MEM20), data = RDA_data)
+prda2 <- rda(out.data ~  MEM11_Adult + MEM20_Adult + Condition(MEM20 + MEM11_Larval_E + MEM12_Larval_E), data = RDA_data)
 prda2_anov <- anova(prda2, permutations = 999, parallel=20)
 cbind(rownames(prda2_anov),round(prda2_anov$Variance[1:length(prda2_anov$Variance)]/sum(prda2_anov$Variance),6))
 RsquareAdj(prda2)
 anova(prda2, by = "margin", permutations = 999, parallel=20)
 
 #Larval MEMs
-prda3 <- rda(out.data ~ MEM10_Larval + Condition(MEM20 + MEM11_Adult + MEM20_Adult), data = RDA_data)
+prda3 <- rda(out.data ~ MEM11_Larval_E + MEM12_Larval_E + Condition(MEM20 + MEM11_Adult + MEM20_Adult), data = RDA_data)
 prda3_anov <- anova(prda3, permutations = 999, parallel=20)
 cbind(rownames(prda3_anov),round(prda3_anov$Variance[1:length(prda3_anov$Variance)]/sum(prda3_anov$Variance),6))
 RsquareAdj(prda3)
@@ -673,16 +738,23 @@ for(i in uniq.new.lats$N[!(uniq.new.lats$N %in% new.lats$N[grep("Pt",rownames(ne
 if(i == 25742){POP <- c(POP,"CP_MX");next}
 POP <- c(POP,as.character(head(pop(gen.Gulf)[gen.Gulf@strata$N == i],n=1)))}
 
-tmp_data <- data.frame(MEM=RDA_data, POP=POP, Coords=uniq.new.lats[which(! uniq.new.lats$N %in% new.lats$N[grep("Pt_",rownames(new.lats))]),1:2], RDA=m.ord_Combine$CCA$wa, MAL=mahalanobis(m.ord_Combine$CCA$wa[,1:2], center=F, cov(m.ord_Combine$CCA$wa[,1:2])))
+tmp_data <- data.frame(MEM=RDA_data, POP=POP, Coords=uniq.new.lats[which(! uniq.new.lats$N %in% new.lats$N[grep("Pt_",rownames(new.lats))]),1:2], RDA=m.ord_Combine$CCA$wa, center=F, cov(m.ord_Combine$CCA$wa[,1:2])))
 tmp_data$POP <- factor(tmp_data$POP, levels = c("DT", "Gulf_FL_S", "Gulf_FL_N", "PC", "AL", "E_LA", "W_LA", "TX", "N_MX", "VC_MX", "CP_MX"))
 
 MEM20.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM20), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "dbMEM 20")
 AMEM11.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM11_Adult), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Adult MEM 11")
 AMEM20.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM20_Adult), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Adult MEM 20")
-LMEM10.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM10_Larval), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Larval MEM 10")
+LMEM11.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM11_Larval_E), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "East Larval MEM 11")
+LMEM12.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=MEM.MEM12_Larval_E), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "East Larval MEM 12")
 
-multiplot(MEM20.map, AMEM11.map, LMEM10.map, AMEM20.map, cols=2)
-ggsave(multiplot(MEM20.map, AMEM11.map, LMEM10.map, AMEM20.map, cols=2), file="Combine_CA_MEM_maps.tif", device="tiff")
+multiplot(MEM20.map, AMEM11.map, LMEM12.map, AMEM20.map, LMEM11.map, cols=2)
+ggsave(multiplot(MEM20.map, AMEM11.map, LMEM12.map, AMEM20.map, LMEM11.map, cols=2), file="Combine_CA_MEM_maps.tif", device="tiff")
+
+ggsave(MEM20.map, file="dbMEM20_CA_map.svg", device="svg")
+ggsave(AMEM11.map, file="AMEM11_CA_map.svg", device="svg")
+ggsave(AMEM20.map, file="AMEM20_CA_map.svg", device="svg")
+ggsave(LMEM11.map, file="LMEM11_CA_map.svg", device="svg")
+ggsave(LMEM12.map, file="LMEM12_CA_map.svg", device="svg")
 
 RDA1.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=RDA.RDA1), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Full RDA 1")
 RDA2.map <- Gulf_map + geom_point(aes(x = Coords.Lon, y = Coords.Lat, fill=RDA.RDA2), data=tmp_data, shape=21, color="black", stroke=0.1, size =2.5) + scale_fill_gradient(low="black", high="red") + labs(fill = "Full RDA 2")
@@ -820,7 +892,7 @@ boxplot(tmp_df2$MEM11, plot=F)$stats[c(2,4)]
 boxplot(tmp_df2$MEM20, plot=F)$stats[c(2,4)]
 }
 
-#Dist MEM 11
+#Adult MEM 11
 AIC_results <- NULL
 for(i in seq(1, 5000, 1)){
 PER <- (2 * 3.1415)/i
@@ -871,7 +943,7 @@ mtext(paste("Period =",AIC_results[AIC_results[,2] == min(AIC_results[,2]),1], "
 
 dev.off()
 
-#Dist MEM 20
+#Adult MEM 20
 AIC_results <- NULL
 for(i in seq(1, 5000, 1)){
 PER <- (2 * 3.1415)/i
@@ -920,12 +992,95 @@ mtext(paste("Period =",AIC_results[AIC_results[,2] == min(AIC_results[,2]),1], "
 dev.off()
 
 #Modeling sine wave for Larval MEMs
-#Setting up object for sine wave modeling
-tmp_df2 <- data.frame(Cells=rownames(Larval_MEM), MEM10=as.numeric(Larval_MEM$MEM10))
+#Setting up DIST object for sine wave modeling
+tmp_df2 <- data.frame(Cells=rownames(Larval_MEM_E), MEM11=as.numeric(Larval_MEM_E$MEM11), MEM12=as.numeric(Larval_MEM_E$MEM12))
 tmp_df2$DIST <- as.numeric(DIST_m[match(tmp_df2[,1], DIST_m[,1]),2])
 tmp_df2 <- tmp_df2[order(tmp_df2$DIST),]
 
-boxplot(tmp_df2$MEM10, plot=F)$stats[c(2,4)]
+boxplot(tmp_df2$MEM11, plot=F)$stats[c(2,4)]
+boxplot(tmp_df2$MEM12, plot=F)$stats[c(2,4)]
+#Getting Groups for coloring
+SUBPOPs <- unique(N_regions$SubPOP)
+c_MEM <- c("mediumblue", "lightslateblue", "cadetblue", "cyan", "darkolivegreen3", "darkgreen", "grey25", "seagreen4", "grey65", "grey40", "steelblue1")
+#Making a dataframe
+SUBPOPs <- data.frame(POP=as.character(as.matrix(SUBPOPs)), Col=c_MEM)
+#Getting the Min and Max Distance values for each group
+POP_RANGE <- NULL
+for(i in as.character(SUBPOPs$POP)){
+CELLS <- N_regions[N_regions$SubPOP == i, "N"]
+POP_DIST <- tmp_df2[tmp_df2[,1] %in% CELLS, "DIST"]
+POP_RANGE <- rbind(POP_RANGE, c(i,min(POP_DIST), max(POP_DIST)))
+}
+for(i in 2:3){POP_RANGE[,i] <- as.numeric(as.matrix(POP_RANGE[,i]))}
+SUBPOPs$Min <- as.numeric(POP_RANGE[,2])
+SUBPOPs$Max <- as.numeric(POP_RANGE[,3])
+
+#Larval MEM 11
+AIC_results <- NULL
+for(i in seq(1, 5000, 1)){
+PER <- (2 * 3.1415)/i
+AIC_results <- rbind(AIC_results, c(i, AIC(lm(MEM11 ~ sin(PER*DIST) + cos(PER*DIST), data=tmp_df2))))
+}
+par(mfrow=c(3,1))
+hist(AIC_results[,2], breaks=100, col="red4")
+plot(AIC_results, xlab="Period", ylab="AIC", pch=19)
+
+PER <- (2 * 3.1415)/(AIC_results[which(AIC_results[,2] == min(AIC_results[,2])),1])
+fit <- lm(MEM11 ~ sin(PER*DIST) + cos(PER*DIST), data=tmp_df2)
+fit
+plot(MEM11 ~ DIST, data=tmp_df2, pch=21, bg="red4", xlab="Distance (km)", ylab="East Larval MEM11")
+lines(seq(1,ceiling(max(tmp_df2$DIST))), predict.lm(fit, data.frame(DIST=seq(1,ceiling(max(tmp_df2$DIST))))), col="mediumblue")
+
+AIC_results[AIC_results[,2] == min(AIC_results[,2]),]
+AIC_results[AIC_results[,2] == min(AIC_results[35:3000,2]),]
+
+par(mfrow=c(3,1))
+PER <- (2 * 3.1415)/(AIC_results[which(AIC_results[,2] == min(AIC_results[,2])),1])
+fit <- lm(MEM11 ~ sin(PER*DIST) + cos(PER*DIST), data=tmp_df2)
+fit
+plot(MEM11 ~ DIST, data=tmp_df2, pch=21, bg="red4", xlab="Distance (km)", ylab="East Larval MEM11")
+lines(seq(1,ceiling(max(tmp_df2$DIST))), predict.lm(fit, data.frame(DIST=seq(1,ceiling(max(tmp_df2$DIST))))), col="mediumblue")
+
+PER <- (2 * 3.1415)/123
+fit <- lm(MEM11 ~ sin(PER*DIST) + cos(PER*DIST), data=tmp_df2)
+fit
+plot(MEM11 ~ DIST, data=tmp_df2, pch=21, bg="red4", xlab="Distance (km)", ylab="East Larval MEM11")
+lines(seq(1,ceiling(max(tmp_df2$DIST))), predict.lm(fit, data.frame(DIST=seq(1,ceiling(max(tmp_df2$DIST))))), col="darkgreen", lty=3)
+
+tiff("Larval_MEM11.tiff", res=200, width=2500, height=2000)
+par(mfrow=c(3,1))
+#Best AIC
+PER <- (2 * 3.1415)/(AIC_results[which(AIC_results[,2] == min(AIC_results[,2])),1])
+fit <- lm(MEM11 ~ sin(PER*DIST) + cos(PER*DIST), data=tmp_df2)
+fit
+plot(MEM11 ~ DIST, data=tmp_df2, pch=21, bg="red4", xlab="Distance (km)", ylab="East Larval MEM11")
+lines(seq(1,ceiling(max(tmp_df2$DIST))), predict.lm(fit, data.frame(DIST=seq(1,ceiling(max(tmp_df2$DIST))))), col="mediumblue")
+
+#Coloring POP
+lim <- par("usr")
+for(i in 1:nrow(SUBPOPs)){
+rect(SUBPOPs$Min[i], lim[3], SUBPOPs$Max[i], lim[4], border = rgb(t(col2rgb(SUBPOPs$Col[i])/255), alpha=0.25), col = rgb(t(col2rgb(SUBPOPs$Col[i])/255), alpha=0.25))
+}
+axis(3, at=apply(SUBPOPs[,3:4],1,mean), labels=SUBPOPs$POP, tick=F, las=2)
+mtext(paste("AIC =",round(min(AIC_results[,2]),2)), 1, adj=0.81, line=-2)
+mtext(paste("Period =",AIC_results[AIC_results[,2] == min(AIC_results[,2]),1], "km"), 1, adj=0.81, line=-1)
+
+#Second best AIC
+PER <- (2 * 3.1415)/123
+fit <- lm(MEM11 ~ sin(PER*DIST) + cos(PER*DIST), data=tmp_df2)
+fit
+plot(MEM11 ~ DIST, data=tmp_df2, pch=21, bg="red4", xlab="Distance (km)", ylab="East Larval MEM11")
+lines(seq(1,ceiling(max(tmp_df2$DIST))), predict.lm(fit, data.frame(DIST=seq(1,ceiling(max(tmp_df2$DIST))))), col="darkgreen", lty=3)
+
+#Coloring POP
+lim <- par("usr")
+for(i in 1:nrow(SUBPOPs)){
+rect(SUBPOPs$Min[i], lim[3], SUBPOPs$Max[i], lim[4], border = rgb(t(col2rgb(SUBPOPs$Col[i])/255), alpha=0.25), col = rgb(t(col2rgb(SUBPOPs$Col[i])/255), alpha=0.25))
+}
+axis(3, at=apply(SUBPOPs[,3:4],1,mean), labels=SUBPOPs$POP, tick=F, las=2)
+mtext(paste("AIC =",round(AIC_results[123,2],2)), 1, adj=0.81, line=-2)
+mtext(paste("Period =",123, "km"), 1, adj=0.81, line=-1)
+dev.off()
 
 #Larval MEM 10
 AIC_results <- NULL
@@ -969,5 +1124,4 @@ rect(SUBPOPs$Min[i], lim[3], SUBPOPs$Max[i], lim[4], border = rgb(t(col2rgb(SUBP
 axis(3, at=apply(SUBPOPs[,3:4],1,mean), labels=SUBPOPs$POP, tick=F, las=2)
 mtext(paste("AIC =",round(min(AIC_results[,2]),2)), 1, adj=0.95, line=-2)
 mtext(paste("Period =",AIC_results[AIC_results[,2] == min(AIC_results[,2]),1], "km"), 1, adj=0.95, line=-1)
-
 dev.off()
