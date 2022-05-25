@@ -10,7 +10,7 @@ rm TotalRawSNPs.vcf &
 bash multi.maf.sh TRS.g25.q10.recode.vcf 0.005 TRSg25q10maf005
 gzip TRS.g25.q10.recode.vcf &
 
-# Filter allelic balance, quality vs depth, strand representation and paired read representation
+# Filter individuls with missing data > 60%
 bash filter_missing_ind.sh TRSg25q10maf005.recode.vcf TRSg25q10maf005MI
 #yes
 #0.6
@@ -74,7 +74,7 @@ vcftools --vcf SNP.TRSdp3g75MIg9p2.1Fdupmaf01.recode.vcf --exclude-positions Lib
 gzip SNP.TRSdp3g75MIg9p2.1Fdupmaf05.recode.vcf &
 gzip SNP.TRSdp3g75MIg9p2.1Fdupmaf01.recode.vcf &
 
-# Moving data to a directoory for haplotyping
+# Moving data to a directory for haplotyping
 ln -s /home/afields/Workspace/Red_Snapper/analysis/Oct2020/haplotyping /home/afields/Workspace/Red_Snapper/analysis/JP
 cp SNP.TRSdp3g75MIg9p2.1Fdupmaf05.recode.vcf haplotyping/
 cd haplotyping
